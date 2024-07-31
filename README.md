@@ -55,8 +55,8 @@ docker build -t fort .
 To (optionally) push to the Docker image to the Avenir Health container registry (permissions required), use:
 
 ```bash
-docker tag fort swtoolscr.azurecr.io/tbstatisticalserver:beta
-docker push swtoolscr.azurecr.io/tbstatisticalserver:beta
+docker tag fort swtoolscr.azurecr.io/tbstatisticalserver:hotfix
+docker push swtoolscr.azurecr.io/tbstatisticalserver:hotfix
 ```
 
 To launch a Docker container from the image, use:

@@ -288,10 +288,13 @@ projections <- function(year,
     ## HR interventions NOTE the notif one will have limited validity
     ANS[,c('I.mid','I.lo','I.hi'):=list(I.mid*HRi,I.lo*HRi,I.hi*HRi)] #OK
     ANS[,c('N.mid','N.lo','N.hi'):=list(N.mid*HRi*HRd,N.lo*HRi*HRd,N.hi*HRi*HRd)] #approx
+    
     ## ANS[,c('M.mid','M.lo','M.hi'):=list(M.mid/HRd,M.lo/HRd,M.hi/HRd)]             #approx
     ## mortality approximation: Untreated' = (Incidence' - Notifications') x CFR
     pb <- maxidxnotna+1; pe <- nrow(ANS)                           #begin/end of projection
-    ANS[pb:pe,M.mid:=(I.mid-N.mid)*CFR]                            #mean
+    
+    ANS[pb:pe,M.mid:=(pmax(I.mid-N.mid,0))*CFR]                            #mean
+    
     ANS[,M.sdx3.92:=sqrt((I.lo-I.hi)^2+(N.lo-N.hi)^2)*CFR]         #uncertainty measure
     ANS[pb:pe,c('M.lo','M.hi'):=list(pmax(0,M.mid-M.sdx3.92/2),M.mid+M.sdx3.92/2)]
     ANS[,M.sdx3.92:=NULL]
@@ -300,7 +303,10 @@ projections <- function(year,
                                         M.lo + TXf*N.mid,M.hi + TXf*N.mid)]
     ## NOTE no extra uncertainty in line above
     ## computing this using duration assumption -
-    ANS[,P.mid:=N.mid*tx.mid + (I.mid-N.mid)*ut.mid]
+    ANS[,P.mid:=N.mid*tx.mid + pmax(I.mid-N.mid,0)*ut.mid]
+    
+    #ANS$P.mid = pmax(ANS$P.mid,0) #Guy added this on 2024-07-31 to avoid negative prevalence
+    
     ## P.sd^2 = (N.mid*tx.m)^2 * ((N.sd/N.mid)^2+(tx.sd/tx.mid)^2) +
     ##     ((I.mid-N.mid)*ut.m)^2 * ( (ut.sd/ut.m)^2 + (I.sd^2+N.sd^2)/(I.mid-N.mid)^2 )
     ANS[,P.sd:=sqrt(
@@ -313,12 +319,15 @@ projections <- function(year,
     lastd <- length(Ihat)-nahead
     ## take off deaths on treatment
     Mhat <- Mhat - TXf * Nhat
+    
+    #Mhat <- pmax(Mhat,0)
+    
     if(any(Mhat[1:lastd]<0)) stop('Implied deaths on TB treatment exceed total TB mortality!')
     logIRR <- log(HRi[(lastd+1):length(HRd)])      #IRR on incidence
     logIRRdelta <- log(HRd[(lastd+1):length(HRd)]) #detection
     if(all(is.na(Phat))){
       ## make guess for P
-      Phat <- Nhat * tx.mid + (Ihat-Nhat) * ut.mid
+      Phat <- Nhat * tx.mid + (pmax(Ihat-Nhat,0)) * ut.mid
       ## ## smooth this:
       ## tosmooth <- data.frame(index=1:length(Phat),Phat=Phat)
       ## smoothmod <- loess(Phat ~ index, data=tosmooth, span = 0.5) #NOTE 0.5 can be varied

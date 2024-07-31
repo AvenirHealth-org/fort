@@ -7,11 +7,11 @@ FROM rstudio/plumber
 
 RUN Rscript -e "install.packages('devtools')"
 
-ARG GIT_BRANCH=main
+ARG GIT_BRANCH=hotfix/negative_results
 
 WORKDIR  /R
 
-RUN git clone -b $GIT_BRANCH --single-branch https://github.com/petedodd/fort.git fort
+RUN git clone -b $GIT_BRANCH --single-branch https://github.com/AvenirHealth-org/fort.git fort
 RUN Rscript -e "devtools::install('fort')"
 
 COPY startup.R .

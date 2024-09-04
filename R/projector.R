@@ -327,7 +327,7 @@ projections <- function(year,
     print(Nhat)
     TXf <- TXp * Mhat / Nhat
     print("new tXf")
-    print(tXf)
+    print(TXf)
     Mhat <- Mhat - TXf * Nhat
     
     #Mhat <- pmax(Mhat,0)

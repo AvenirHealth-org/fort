@@ -197,10 +197,10 @@ projections <- function(year,
                         returninternalfit=FALSE,
                         verbose=FALSE
                         ){
-  print("TXf")
-  print(TXf)
-  print("TXp")
-  print(TXp)
+  warning("TXf")
+  warning(TXf)
+  warning("TXp")
+  warning(TXp)
   ## argument management
   arguments <- list(...)
   list2env(arguments,envir = environment())                   #boost ... to this scope

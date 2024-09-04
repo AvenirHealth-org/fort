@@ -188,7 +188,8 @@ projections <- function(year,
                         Nhat,sEN,
                         Mhat,sEM,
                         Phat,sEP,
-                        TXf,HRd,HRi,ORt,
+                        TXf,TXp,
+                        HRd,HRi,ORt,
                         ...,
                         nrep=500,
                         output='projection',
@@ -196,6 +197,10 @@ projections <- function(year,
                         returninternalfit=FALSE,
                         verbose=FALSE
                         ){
+  print("TXf")
+  print(TXf)
+  print("TXp")
+  print(TXp)
   ## argument management
   arguments <- list(...)
   list2env(arguments,envir = environment())                   #boost ... to this scope
@@ -318,6 +323,7 @@ projections <- function(year,
     nahead <- which.max(!is.na(rev(Ihat)))-1 #assume NAs at back
     lastd <- length(Ihat)-nahead
     ## take off deaths on treatment
+    TXf <- TXp * Mhat / Nhat
     Mhat <- Mhat - TXf * Nhat
     
     #Mhat <- pmax(Mhat,0)

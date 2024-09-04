@@ -323,11 +323,11 @@ projections <- function(year,
     nahead <- which.max(!is.na(rev(Ihat)))-1 #assume NAs at back
     lastd <- length(Ihat)-nahead
     ## take off deaths on treatment
-    print("Nhat")
-    print(Nhat)
-    TXf <- TXp * Mhat / Nhat
-    print("new tXf")
-    print(TXf)
+    # print("Nhat")
+    # print(Nhat)
+    # TXf <- TXp * Mhat / Nhat
+    # print("new tXf")
+    # print(TXf)
     Mhat <- Mhat - TXf * Nhat
     
     #Mhat <- pmax(Mhat,0)

@@ -690,6 +690,7 @@ Cprojections <- function(year,
     cat('...done.\n')
   }
 
+  known_params[known_params== -Inf] <- log(1E-12)
   ## rwI
   modelrwi <- bssm::ssm_nlg(y = Yhat,
                             a1=pntrsrw$a1_fn, P1 = pntrsrw$P1_fn,

@@ -6,7 +6,7 @@
 ##' @param x a vector of inputs
 ##' @return the 97.5% quantile
 ##' @author Pete Dodd
-hi <- function(x)quantile(x,0.975)
+hi <- function(x)quantile(x,0.975, na.rm=T)
 
 ##' Lo Bounds
 ##'
@@ -15,7 +15,7 @@ hi <- function(x)quantile(x,0.975)
 ##' @param x a vector of inputs
 ##' @return the 2.5% quantile
 ##' @author Pete Dodd
-lo <- function(x)quantile(x,0.025)
+lo <- function(x)quantile(x,0.025, na.rm=T)
 
 ##' Logit Transformation
 ##'

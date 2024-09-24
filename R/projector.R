@@ -60,7 +60,7 @@ mcmcsmry <- function(fit){
   tmpo[,value:=exp(value)]
   tmpo[,variable:=gsub('log','',variable)]
   out <- rbind(out,tmpo)
-  out[,list(mid=median(value),lo=lo(value),hi=hi(value)),by=list(variable,time)]
+  out[,list(mid=median(value, na.rm=T),lo=lo(value),hi=hi(value)),by=list(variable,time)]
 }
 
 
@@ -691,6 +691,7 @@ Cprojections <- function(year,
   }
 
   known_params[known_params== -Inf] <- log(1E-12)
+  known_params[is.nan(known_params)] <- 0
   ## rwI
   modelrwi <- bssm::ssm_nlg(y = Yhat,
                             a1=pntrsrw$a1_fn, P1 = pntrsrw$P1_fn,

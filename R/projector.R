@@ -188,8 +188,7 @@ projections <- function(year,
                         Nhat,sEN,
                         Mhat,sEM,
                         Phat,sEP,
-                        TXf,TXp,
-                        HRd,HRi,ORt,
+                        TXf,HRd,HRi,ORt,
                         ...,
                         nrep=500,
                         output='projection',
@@ -197,10 +196,6 @@ projections <- function(year,
                         returninternalfit=FALSE,
                         verbose=FALSE
                         ){
-  print("TXf")
-  print(TXf)
-  print("TXp")
-  print(TXp)
   ## argument management
   arguments <- list(...)
   list2env(arguments,envir = environment())                   #boost ... to this scope
@@ -323,17 +318,13 @@ projections <- function(year,
     nahead <- which.max(!is.na(rev(Ihat)))-1 #assume NAs at back
     lastd <- length(Ihat)-nahead
     ## take off deaths on treatment
-    # print("Nhat")
-    # print(Nhat)
-    # TXf <- TXp * Mhat / Nhat
-    # print("new tXf")
-    # print(TXf)
     Mhat <- Mhat - TXf * Nhat
     
     #Mhat <- pmax(Mhat,0)
     
-    if(any(Mhat[1:lastd]<0)) stop('Implied deaths on TB treatment exceed total TB mortality!')
-    logIRR <- log(HRi[(lastd+1):length(HRd)])      #IRR on incidence
+    ##if(any(Mhat[1:lastd]<0)) stop('Implied deaths on TB treatment exceed total TB mortality!')
+    if(any(Mhat[lastd+1]<0)) stop('Implied deaths on TB treatment exceed total TB mortality!')
+    logIRR <- log(HRi[(lastd):length(HRd)])      #IRR on incidence
     logIRRdelta <- log(HRd[(lastd+1):length(HRd)]) #detection
     if(all(is.na(Phat))){
       ## make guess for P

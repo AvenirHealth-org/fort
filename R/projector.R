@@ -324,7 +324,7 @@ projections <- function(year,
     
     ##if(any(Mhat[1:lastd]<0)) stop('Implied deaths on TB treatment exceed total TB mortality!')
     if(any(Mhat[lastd]<0)) stop('Implied deaths on TB treatment exceed total TB mortality!')
-    logIRR <- log(HRi[(lastd):length(HRd)])      #IRR on incidence
+    logIRR <- log(HRi[(lastd+1):length(HRd)])      #IRR on incidence
     logIRRdelta <- log(HRd[(lastd+1):length(HRd)]) #detection
     if(all(is.na(Phat))){
       ## make guess for P

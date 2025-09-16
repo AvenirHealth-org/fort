@@ -293,7 +293,19 @@ projections <- function(year,
     ## mortality approximation: Untreated' = (Incidence' - Notifications') x CFR
     pb <- maxidxnotna+1; pe <- nrow(ANS)                           #begin/end of projection
     
+    #Guy made the following changes on 2025-09-16, following Carel's suggestion
+    M <- ANS$M.mid
+    Mlo <- ANS$M.lo
+    Mhi <- ANS$M.hi
+    #End Guy made the following changes on 2025-09-16, following Carel's suggestion
+    
     ANS[pb:pe,M.mid:=(pmax(I.mid-N.mid,0))*CFR]                            #mean
+    
+    #Guy made the following changes on 2025-09-16, following Carel's suggestion (1)
+    M1 <- M2 <- (pmax(I.mid - N.mid, 0)) * CFR #(M.mid, (pmax(I.mid - N.mid, 0)) * CFR)
+    M1lo <- pmax(0, M.mid-M.sdx3.92/2)
+    M1hi <- M.mid + M.sdx3.92/2
+    #End Guy made the following changes on 2025-09-16, following Carel's suggestion (1)
     
     ANS[,M.sdx3.92:=sqrt((I.lo-I.hi)^2+(N.lo-N.hi)^2)*CFR]         #uncertainty measure
     ANS[pb:pe,c('M.lo','M.hi'):=list(pmax(0,M.mid-M.sdx3.92/2),M.mid+M.sdx3.92/2)]
@@ -301,6 +313,16 @@ projections <- function(year,
     ## add treated mortality back
     ANS[,c('M.mid','M.lo','M.hi'):=list(M.mid + TXf*N.mid,
                                         M.lo + TXf*N.mid,M.hi + TXf*N.mid)]
+    
+    #Guy made the following changes on 2025-09-16, following Carel's suggestion (2)
+    M2 <- M.mid + TXf * N.mid
+    M2lo <- M.lo + TXf * N.mid
+    M2hi <- M.hi + TXf * N.mid
+    ANS$M.mid[pb:pe] <- M[pb:pe] + (M2[pb:pe]-M1[pb:pe])
+    ANS$M.lo[pb:pe] <- Mlo[pb:pe] + (M2lo[pb:pe]-M1lo[pb:pe])
+    ANS$M.hi[pb:pe] <- Mhi[pb:pe] + (M2hi[pb:pe]-M1hi[pb:pe])
+    #End Guy made the following changes on 2025-09-16, following Carel's suggestion (2)
+    
     ## NOTE no extra uncertainty in line above
     ## computing this using duration assumption -
     ANS[,P.mid:=N.mid*tx.mid + pmax(I.mid-N.mid,0)*ut.mid]

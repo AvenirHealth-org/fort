@@ -286,42 +286,19 @@ projections <- function(year,
     ANS <- merge(ANS1,ANS2,by='year')
     if('Hhat' %in% names(arguments) & 'sEH' %in% names(arguments)) ANS <- merge(ANS,RH,by='year')
     ## HR interventions NOTE the notif one will have limited validity
+    
+    M <- ANS$M.mid
+    dM <- pmax((1-HRi)* ANS$I.mid * CFR + (HRi*HRd-1) * ANS$N.mid * (CFR - TXf),0)
+    
     ANS[,c('I.mid','I.lo','I.hi'):=list(I.mid*HRi,I.lo*HRi,I.hi*HRi)] #OK
     ANS[,c('N.mid','N.lo','N.hi'):=list(N.mid*HRi*HRd,N.lo*HRi*HRd,N.hi*HRi*HRd)] #approx
     
-    ## ANS[,c('M.mid','M.lo','M.hi'):=list(M.mid/HRd,M.lo/HRd,M.hi/HRd)]             #approx
-    ## mortality approximation: Untreated' = (Incidence' - Notifications') x CFR
+    
     pb <- maxidxnotna+1; pe <- nrow(ANS)                           #begin/end of projection
     
-    #Guy made the following changes on 2025-09-16, following Carel's suggestion
-    M <- ANS$M.mid
-    Mlo <- ANS$M.lo
-    Mhi <- ANS$M.hi
-    #End Guy made the following changes on 2025-09-16, following Carel's suggestion
-    
-    ANS[pb:pe,M.mid:=(pmax(I.mid-N.mid,0))*CFR]                            #mean
-    
-    #Guy made the following changes on 2025-09-16, following Carel's suggestion (1)
-    M1 <- M2 <- (pmax(I.mid - N.mid, 0)) * CFR #(M.mid, (pmax(I.mid - N.mid, 0)) * CFR)
-    M1lo <- pmax(0, M.mid-M.sdx3.92/2)
-    M1hi <- M.mid + M.sdx3.92/2
-    #End Guy made the following changes on 2025-09-16, following Carel's suggestion (1)
-    
-    ANS[,M.sdx3.92:=sqrt((I.lo-I.hi)^2+(N.lo-N.hi)^2)*CFR]         #uncertainty measure
-    ANS[pb:pe,c('M.lo','M.hi'):=list(pmax(0,M.mid-M.sdx3.92/2),M.mid+M.sdx3.92/2)]
-    ANS[,M.sdx3.92:=NULL]
-    ## add treated mortality back
-    ANS[,c('M.mid','M.lo','M.hi'):=list(M.mid + TXf*N.mid,
-                                        M.lo + TXf*N.mid,M.hi + TXf*N.mid)]
-    
-    #Guy made the following changes on 2025-09-16, following Carel's suggestion (2)
-    M2 <- M.mid + TXf * N.mid
-    M2lo <- M.lo + TXf * N.mid
-    M2hi <- M.hi + TXf * N.mid
-    ANS$M.mid[pb:pe] <- M[pb:pe] + (M2[pb:pe]-M1[pb:pe])
-    ANS$M.lo[pb:pe] <- Mlo[pb:pe] + (M2lo[pb:pe]-M1lo[pb:pe])
-    ANS$M.hi[pb:pe] <- Mhi[pb:pe] + (M2hi[pb:pe]-M1hi[pb:pe])
-    #End Guy made the following changes on 2025-09-16, following Carel's suggestion (2)
+    ANS$M.mid = pmax(M-dM+ with(ANS,TXf * N.mid),0)
+    ANS$M.lo = pmax(ANS$M.lo-dM + with(ANS,TXf * N.mid),0) #pmax(Mlo-1*96*sEdM,0)
+    ANS$M.hi = pmax(ANS$M.hi-dM + with(ANS,TXf * N.mid),0)#Mhi+1*96*sEdM
     
     ## NOTE no extra uncertainty in line above
     ## computing this using duration assumption -

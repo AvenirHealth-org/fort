@@ -50,7 +50,10 @@ function(
     output="projection",
     modelType="failsafe") {
   set.seed(173)
-
+  print("hRi")
+  print(hRi)
+  print("tXf")
+  print(tXf)
   data <- fort::projections(
     year = year,
     Ihat = iHat,
@@ -71,6 +74,8 @@ function(
     modeltype = modelType
   ) |> 
     lapply(unlist)
+  print("I")
+  print(data$I.mid)
 
   list(
     year = data$year,

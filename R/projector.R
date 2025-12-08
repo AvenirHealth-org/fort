@@ -228,6 +228,16 @@ projections <- function(year,
   ## WHO methods appendix: tx ~ U[0.2,2]; ut ~ U[1,4]
   tx.mid <- (2+0.2)/2; ut.mid <- (4+1)/2 #midpoints
   tx.sd <- (2-0.2)/3.92; ut.sd <- (4-1)/3.92 #SD
+  
+  ###20251205-Calculate CFR here
+  cfrz <- (Mhat-TXf*Nhat) / (Ihat - Nhat) #(untreated mort'y)/(untreated inc)
+  CFR <- mean(cfrz,na.rm=TRUE) #mean
+  if(is.na(CFR) | CFR<0 | CFR >1){
+    warning('Untreated CFR implied by data provided is pathological!\nUsing CFR = 0.5')
+    CFR <- 0.5                       #safety
+  }
+  #End Calculate CFR here
+  
   if(modeltype=='failsafe'){ #============== FAILSAFE MODEL ==============
     ## incidence
     suppressWarnings({RI <- noisyex(year,Ihat,sEI,nrep,runs=FALSE,1)})
@@ -236,19 +246,19 @@ projections <- function(year,
     suppressWarnings({RN <- noisyex(year,Nhat,sEN,nrep,runs=FALSE,1)})
     names(RN) <- c('year','N.mid','N.sd','N.lo','N.hi')
     ## mortality
-    suppressWarnings({RM <- noisyex(year,
-                                    Mhat-TXf*Nhat, #take off mortality on treatment (see below addon)
-                                    sEM,nrep,runs=FALSE,1)})
+    suppressWarnings({RM <- noisyex(year,Mhat,sEM,nrep,runs=FALSE,1)})
     names(RM) <- c('year','M.mid','M.sd','M.lo','M.hi')
     ## calculate a version of the CFR to carry fwd
     maxidxnotna <- sum(!is.na(Ihat + Nhat + Mhat)) #last index with all necessary data provided
-    cfrz <- (Mhat-TXf*Nhat) / (Ihat - Nhat) #(untreated mort'y)/(untreated inc)
-    ## CFR <- cfrz[maxidxnotna] #last
-    CFR <- mean(cfrz,na.rm=TRUE) #mean
-    if(is.na(CFR) | CFR<0 | CFR >1){
-      warning('Untreated CFR implied by data provided is pathological!\nUsing CFR = 0.5')
-      CFR <- 0.5                       #safety
-    }
+    #2025-12-05 Test
+    #cfrz <- (Mhat-TXf*Nhat) / (Ihat - Nhat) #(untreated mort'y)/(untreated inc)
+    ### CFR <- cfrz[maxidxnotna] #last
+    #CFR <- mean(cfrz,na.rm=TRUE) #mean
+    #if(is.na(CFR) | CFR<0 | CFR >1){
+    #  warning('Untreated CFR implied by data provided is pathological!\nUsing CFR = 0.5')
+    #  CFR <- 0.5                       #safety
+    #}
+    #End 2025-12-05 Test
     ## calculate last CDR to carry fwd
     CDR <- Nhat[maxidxnotna] / Ihat[maxidxnotna]
     if(is.na(CDR)  | CDR<0 | CDR >1 ){
@@ -287,18 +297,19 @@ projections <- function(year,
     if('Hhat' %in% names(arguments) & 'sEH' %in% names(arguments)) ANS <- merge(ANS,RH,by='year')
     ## HR interventions NOTE the notif one will have limited validity
     
-    M <- ANS$M.mid
-    dM <- pmax((1-HRi)* ANS$I.mid * CFR + (HRi*HRd-1) * ANS$N.mid * (CFR - TXf),0)
     
     ANS[,c('I.mid','I.lo','I.hi'):=list(I.mid*HRi,I.lo*HRi,I.hi*HRi)] #OK
     ANS[,c('N.mid','N.lo','N.hi'):=list(N.mid*HRi*HRd,N.lo*HRi*HRd,N.hi*HRi*HRd)] #approx
-    
-    
-    pb <- maxidxnotna+1; pe <- nrow(ANS)                           #begin/end of projection
-    
-    ANS$M.mid = pmax(M-dM+ with(ANS,TXf * N.mid),0)
-    ANS$M.lo = pmax(ANS$M.lo-dM + with(ANS,TXf * N.mid),0) #pmax(Mlo-1*96*sEdM,0)
-    ANS$M.hi = pmax(ANS$M.hi-dM + with(ANS,TXf * N.mid),0)#Mhi+1*96*sEdM
+  
+    # dont need pb at the moment, delete in next update
+    #pb <- maxidxnotna+1; pe <- nrow(ANS)   #begin/end of projection
+  
+    M <- ANS$M.mid
+    dM <- pmax((1-HRi)* ANS$I.mid * CFR + (HRi*HRd-1) * ANS$N.mid * (CFR - TXf),0)
+      
+    ANS$M.mid = pmax(M-dM,0)
+    ANS$M.lo = pmax(ANS$M.lo-dM,0) #pmax(Mlo-1*96*sEdM,0)
+    ANS$M.hi = pmax(ANS$M.hi-dM,0)#Mhi+1*96*sEdM
     
     ## NOTE no extra uncertainty in line above
     ## computing this using duration assumption -
@@ -316,8 +327,10 @@ projections <- function(year,
   } else { #============== SSM versions ==============
     nahead <- which.max(!is.na(rev(Ihat)))-1 #assume NAs at back
     lastd <- length(Ihat)-nahead
-    ## take off deaths on treatment
-    Mhat <- Mhat - TXf * Nhat
+    
+    #2025-12-05. Ignore this, not removing untreated mortality at the moment
+    #Mhat <- Mhat - TXf * Nhat
+    #End 2025-12-05. Ignore this
     
     #Mhat <- pmax(Mhat,0)
     
@@ -344,20 +357,35 @@ projections <- function(year,
     if(verbose) cat('...nahead=',nahead,'\n')
     if(verbose) cat('...lastd=',lastd,'\n')
     if(verbose) cat('...passing off to Cprojections:\n')
-
-    ANS <- Cprojections(year=year[didx],
+    
+    ANS0 <- Cprojections(year=year[didx],
                         Ihat=Ihat[didx],sEI=sEI[didx],
                         Nhat=Nhat[didx],sEN=sEN[didx],
                         Mhat=Mhat[didx],sEM=sEM[didx],
                         Phat=Phat[didx],sEP=sEP[didx],
                         nahead=nahead,
-                        logIRR=logIRR,
-                        logIRRdelta=logIRRdelta,
+                        logIRR= 0*logIRR, #First, calculate with no impact on HRd and HRi
+                        logIRRdelta= 0*logIRRdelta,
                         returntype=output,
                         modeltype=modeltype,
                         verbose=verbose,
                         ...
                         )
+    
+    ANS <- Cprojections(year=year[didx],
+                         Ihat=Ihat[didx],sEI=sEI[didx],
+                         Nhat=Nhat[didx],sEN=sEN[didx],
+                         Mhat=Mhat[didx],sEM=sEM[didx],
+                         Phat=Phat[didx],sEP=sEP[didx],
+                         nahead=nahead,
+                         logIRR=logIRR,
+                         logIRRdelta=logIRRdelta,
+                         returntype=output,
+                         modeltype=modeltype,
+                         verbose=verbose,
+                         ...
+    )
+    
     if(verbose) cat('...Cprojections returned OK...\n')
 
 
@@ -389,11 +417,40 @@ projections <- function(year,
            (N.hi-N.lo)/3.92,
            (M.hi-M.lo)/3.92,
            (P.hi-P.lo)/3.92)] #NOTE were N TODO
-    ## adding back on deaths off treatment
-    ANS[,M.mid:=M.mid + TXf * N.mid]
-    ANS[,M.sd:=sqrt(M.sd^2 + TXf^2 * N.sd^2)]
-    ANS[,M.hi:=M.mid + 1.96*M.sd]
-    ANS[,M.lo:=pmax(M.mid - 1.96*M.sd,0)]
+    
+    ANS0 <- data.table::dcast(ANS0[variable %in% c('Incidence','Notifications',
+                                                   'Prevalence','Deaths','time')],
+                              time ~ variable,value.var=c('mid','lo','hi'))
+    names(ANS0)[n=='time'] <- 'year'
+    names(ANS0)[n=='mid_Incidence'] <- 'I.mid'
+    names(ANS0)[n=='lo_Incidence'] <- 'I.lo'
+    names(ANS0)[n=='hi_Incidence'] <- 'I.hi'
+    names(ANS0)[n=='mid_Notifications'] <- 'N.mid'
+    names(ANS0)[n=='lo_Notifications'] <- 'N.lo'
+    names(ANS0)[n=='hi_Notifications'] <- 'N.hi'
+    names(ANS0)[n=='mid_Deaths'] <- 'M.mid'
+    names(ANS0)[n=='lo_Deaths'] <- 'M.lo'
+    names(ANS0)[n=='hi_Deaths'] <- 'M.hi'
+    names(ANS0)[n=='mid_Prevalence'] <- 'P.mid'
+    names(ANS0)[n=='lo_Prevalence'] <- 'P.lo'
+    names(ANS0)[n=='hi_Prevalence'] <- 'P.hi'
+    ANS0$year <- year[ANS0$year]
+    ANS0 <- ANS0[!is.na(year)] #removes 1 ahead if 'fit'
+    
+    dM <- (ANS0$I.mid-ANS$I.mid)*CFR + (ANS$N.mid-ANS0$N.mid)*(CFR-TXf)
+    ANS$M.mid <- pmax(ANS$M.mid - dM,0)
+    ANS$M.lo <- pmax(ANS$M.lo - dM,0)
+    ANS$M.hi <- pmax(ANS$M.hi - dM,0)
+    
+    #Commenting ANS[,M.mid:=M.mid + TXf * N.mid] out (for testing 2025-12-05)
+    ### adding back on deaths off treatment, not needed with current approach
+    #ANS[,M.mid:=M.mid + TXf * N.mid]
+    ##ANS[,M.mid:=M.mid + TXf * Nhat]
+
+    #ANS[,M.sd:=sqrt(M.sd^2 + TXf^2 * N.sd^2)]
+    #ANS[,M.hi:=M.mid + 1.96*M.sd]
+    #ANS[,M.lo:=pmax(M.mid - 1.96*M.sd,0)]
+    #End Commenting ANS[,M.mid:=M.mid + TXf * N.mid] out (for testing 2025-12-05)
     ## reorder
     setcolorder(ANS,neworder = c("year",
                                  "I.mid", "I.sd",  "I.lo", "I.hi",
@@ -538,6 +595,13 @@ Cprojections <- function(year,
   Yhat <- cbind(Ihat,Phat,Nhat,Mhat)
   NoverI <- Nhat[1]/Ihat[1]
 
+  #Add this on 2025-12-06 as per Carel suggestion
+  temp_maxnona <- max(which(!is.na(Nhat) & !is.na(Ihat)))[1]
+  if(length(temp_maxnona)>=1){
+    NoverI <- Nhat[temp_maxnona]/Ihat[temp_maxnona]
+  }
+  #End Add this on 2025-12-06 as per Carel suggestion
+  
   ## transformations NOTE reconsider
   Yhat <- log(Yhat)
   Vhat <- cbind( rep(1/10,nrow(Yhat)), #I

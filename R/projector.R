@@ -372,6 +372,20 @@ projections <- function(year,
                         ...
                         )
     
+  ANS0_delta <- Cprojections(year=year[didx],
+                        Ihat=Ihat[didx],sEI=sEI[didx],
+                        Nhat=Nhat[didx],sEN=sEN[didx],
+                        Mhat=Mhat[didx],sEM=sEM[didx],
+                        Phat=Phat[didx],sEP=sEP[didx],
+                        nahead=nahead,
+                        logIRR= 0*logIRR, #First, calculate with no impact on HRd and HRi
+                        logIRRdelta= logIRRdelta,
+                        returntype=output,
+                        modeltype=modeltype,
+                        verbose=verbose,
+                        ...
+                        )
+
     ANS <- Cprojections(year=year[didx],
                          Ihat=Ihat[didx],sEI=sEI[didx],
                          Nhat=Nhat[didx],sEN=sEN[didx],
@@ -436,11 +450,39 @@ projections <- function(year,
     names(ANS0)[n=='hi_Prevalence'] <- 'P.hi'
     ANS0$year <- year[ANS0$year]
     ANS0 <- ANS0[!is.na(year)] #removes 1 ahead if 'fit'
+
+
+    ANS0_delta <- data.table::dcast(ANS0_delta[variable %in% c('Incidence','Notifications',
+                                                   'Prevalence','Deaths','time')],
+                              time ~ variable,value.var=c('mid','lo','hi'))
+    names(ANS0_delta)[n=='time'] <- 'year'
+    names(ANS0_delta)[n=='mid_Incidence'] <- 'I.mid'
+    names(ANS0_delta)[n=='lo_Incidence'] <- 'I.lo'
+    names(ANS0_delta)[n=='hi_Incidence'] <- 'I.hi'
+    names(ANS0_delta)[n=='mid_Notifications'] <- 'N.mid'
+    names(ANS0_delta)[n=='lo_Notifications'] <- 'N.lo'
+    names(ANS0_delta)[n=='hi_Notifications'] <- 'N.hi'
+    names(ANS0_delta)[n=='mid_Deaths'] <- 'M.mid'
+    names(ANS0_delta)[n=='lo_Deaths'] <- 'M.lo'
+    names(ANS0_delta)[n=='hi_Deaths'] <- 'M.hi'
+    names(ANS0_delta)[n=='mid_Prevalence'] <- 'P.mid'
+    names(ANS0_delta)[n=='lo_Prevalence'] <- 'P.lo'
+    names(ANS0_delta)[n=='hi_Prevalence'] <- 'P.hi'
+    ANS0_delta$year <- year[ANS0_delta$year]
+    ANS0_delta <- ANS0_delta[!is.na(year)] #removes 1 ahead if 'fit'
+
     
     dM <- (ANS0$I.mid-ANS$I.mid)*CFR + (ANS$N.mid-ANS0$N.mid)*(CFR-TXf)
     ANS$M.mid <- pmax(ANS$M.mid - dM,0)
     ANS$M.lo <- pmax(ANS$M.lo - dM,0)
     ANS$M.hi <- pmax(ANS$M.hi - dM,0)
+
+    dI <- ANS0$I.mid*pmin(1-HRi,1);#dI <- pmin(ANS0$I.mid*(1-HRi),1);
+    ANS$I.mid <- pmax(ANS0_delta$I.mid - dI,0)
+    ANS$I.lo <- pmax(ANS0_delta$I.lo - dI,0)
+    ANS$I.hi <- pmax(ANS0_delta$I.hi - dI,0)
+
+
     
     #Commenting ANS[,M.mid:=M.mid + TXf * N.mid] out (for testing 2025-12-05)
     ### adding back on deaths off treatment, not needed with current approach

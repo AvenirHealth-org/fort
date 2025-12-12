@@ -471,16 +471,19 @@ projections <- function(year,
     ANS0_delta$year <- year[ANS0_delta$year]
     ANS0_delta <- ANS0_delta[!is.na(year)] #removes 1 ahead if 'fit'
 
-    
+    #incidence impact, using logIRRdelta and HRi, as used in failsafe 
+    dI <- ANS0$I.mid*pmin(1-HRi,1);
+    ANS$I.mid <- pmax(ANS0_delta$I.mid - dI,0)
+    ANS$I.lo <- pmax(ANS0_delta$I.lo - dI,0)
+    ANS$I.hi <- pmax(ANS0_delta$I.hi - dI,0)
+
+    #mortality impact, using the same calc as failsafe 
     dM <- (ANS0$I.mid-ANS$I.mid)*CFR + (ANS$N.mid-ANS0$N.mid)*(CFR-TXf)
     ANS$M.mid <- pmax(ANS$M.mid - dM,0)
     ANS$M.lo <- pmax(ANS$M.lo - dM,0)
     ANS$M.hi <- pmax(ANS$M.hi - dM,0)
 
-    dI <- ANS0$I.mid*pmin(1-HRi,1);#dI <- pmin(ANS0$I.mid*(1-HRi),1);
-    ANS$I.mid <- pmax(ANS0_delta$I.mid - dI,0)
-    ANS$I.lo <- pmax(ANS0_delta$I.lo - dI,0)
-    ANS$I.hi <- pmax(ANS0_delta$I.hi - dI,0)
+
 
 
     

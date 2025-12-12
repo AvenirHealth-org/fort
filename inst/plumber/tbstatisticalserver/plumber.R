@@ -27,7 +27,7 @@ cors <- function(req, res) {
 #* @get /version
 #* @serializer unboxedJSON
 function() {
-  list(title="Fort", version = "0.1.72")
+  list(title="Fort", version = "0.1.73")
 }
 
 #* @post /projection

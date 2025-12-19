@@ -307,7 +307,7 @@ projections <- function(year,
     print(CFR)
     print('TXf')
     print(TXf)
-    print('Ans$N.mid')
+    print('ANS$N.mid')
     print(ANS$N.mid)
     M <- ANS$M.mid
     dM <- pmax((1-HRi)* ANS$I.mid * CFR + (HRi*HRd-1) * ANS$N.mid * (CFR - TXf),0)
@@ -315,7 +315,7 @@ projections <- function(year,
     print(dM)
     print('HRI')  
     print(HRi)
-    print('HRD'
+    print('HRD')
     print(HRd)
     ANS$M.mid = pmax(M-dM,0)
     ANS$M.lo = pmax(ANS$M.lo-dM,0) #pmax(Mlo-1*96*sEdM,0)

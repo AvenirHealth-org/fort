@@ -303,10 +303,20 @@ projections <- function(year,
   
     # dont need pb at the moment, delete in next update
     #pb <- maxidxnotna+1; pe <- nrow(ANS)   #begin/end of projection
-  
+    print('CFR')
+    print(CFR)
+    print('TXf')
+    print(TXf)
+    print('Ans$N.mid')
+    print(ANS$N.mid)
     M <- ANS$M.mid
     dM <- pmax((1-HRi)* ANS$I.mid * CFR + (HRi*HRd-1) * ANS$N.mid * (CFR - TXf),0)
-      
+    print('DM')
+    print(dM)
+    print('HRI')  
+    print(HRi)
+    print('HRD'
+    print(HRd)
     ANS$M.mid = pmax(M-dM,0)
     ANS$M.lo = pmax(ANS$M.lo-dM,0) #pmax(Mlo-1*96*sEdM,0)
     ANS$M.hi = pmax(ANS$M.hi-dM,0)#Mhi+1*96*sEdM

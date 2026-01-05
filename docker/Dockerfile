@@ -12,6 +12,7 @@ ARG GIT_BRANCH=hotfix/negative_results
 WORKDIR  /R
 
 RUN git clone -b $GIT_BRANCH --single-branch https://github.com/AvenirHealth-org/fort.git fort
+# COPY fort ./fort
 RUN Rscript -e "devtools::install('fort')"
 
 COPY startup.R .

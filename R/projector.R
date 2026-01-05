@@ -216,28 +216,61 @@ projections <- function(year,
     HRi <- exp( imputeTS::na_kalman(log(HRi)) )
     warning('Interpolating over NAs in HRi provided!')
   }
+
+  if(any(is.na(TXf))){
+    TXf0 <- expit( imputeTS::na_kalman(logit(TXf)) )
+    warning('Interpolating over NAs in TXf provided!')
+  } else { TXf0 <- expit( logit(TXf) );} #apply effect
+
   if(any(is.na(ORt))){
     ORt <- exp( imputeTS::na_kalman(log(ORt)) )
     warning('Interpolating over NAs in ORt provided!')
   }
+
   if(any(is.na(TXf))){
     TXf <- expit( imputeTS::na_kalman(logit(TXf)) + log(ORt) )
     warning('Interpolating over NAs in TXf provided!')
   } else { TXf <- expit( logit(TXf) + log(ORt) );} #apply effect
+
   ## duration assumptions for use below
   ## WHO methods appendix: tx ~ U[0.2,2]; ut ~ U[1,4]
   tx.mid <- (2+0.2)/2; ut.mid <- (4+1)/2 #midpoints
   tx.sd <- (2-0.2)/3.92; ut.sd <- (4-1)/3.92 #SD
-  
+
   ###20251205-Calculate CFR here
-  cfrz <- (Mhat-TXf*Nhat) / (Ihat - Nhat) #(untreated mort'y)/(untreated inc)
+  cfrz <- (Mhat-TXf*Nhat) / (Ihat - Nhat) #(untreated mort)/(untreated inc)
   CFR <- mean(cfrz,na.rm=TRUE) #mean
-  if(is.na(CFR) | CFR<0 | CFR >1){
-    warning('Untreated CFR implied by data provided is pathological!\nUsing CFR = 0.5')
-    CFR <- 0.5                       #safety
+  if(is.na(CFR) | CFR<0 | CFR > 0.43){
+    warning('Untreated CFR implied by data provided is pathological!\nUsing CFR = 0.43')
+    CFR <- 0.43                       #safety
   }
   #End Calculate CFR here
-  
+
+  ## calculate last CDR to carry fwd
+  maxidxnotna <- sum(!is.na(Ihat + Nhat + Mhat)) #last index with all necessary data provided
+  CDR <- Nhat[maxidxnotna] / Ihat[maxidxnotna]
+  if(is.na(CDR)  | CDR<0 | CDR >1 ){
+    warning('Untreated CDR implied by data provided is pathological!\nUsing CDR = 0.7')
+    CDR <- 0.7                       #safety
+  }
+  #End Calculate CDR here
+
+  #estimate first year of impact, usually it is maxidxnotna+1
+  impactType <- "baseline"
+  firstYearImpact <- maxidxnotna+1
+
+  firstHRi <- which(HRi<1)
+  firstHRd <- which(HRd>1)
+  firstORt <- which(ORt<1)
+
+
+  if(sum(firstHRi+firstHRd+firstORt)>0){
+    firstYearImpact <- c(firstHRi,firstHRd,firstORt)
+    firstYearImpact <- min(firstYearImpact)[1]
+    impactType <- "scaleup"
+  }
+
+
   if(modeltype=='failsafe'){ #============== FAILSAFE MODEL ==============
     ## incidence
     suppressWarnings({RI <- noisyex(year,Ihat,sEI,nrep,runs=FALSE,1)})
@@ -248,23 +281,7 @@ projections <- function(year,
     ## mortality
     suppressWarnings({RM <- noisyex(year,Mhat,sEM,nrep,runs=FALSE,1)})
     names(RM) <- c('year','M.mid','M.sd','M.lo','M.hi')
-    ## calculate a version of the CFR to carry fwd
-    maxidxnotna <- sum(!is.na(Ihat + Nhat + Mhat)) #last index with all necessary data provided
-    #2025-12-05 Test
-    #cfrz <- (Mhat-TXf*Nhat) / (Ihat - Nhat) #(untreated mort'y)/(untreated inc)
-    ### CFR <- cfrz[maxidxnotna] #last
-    #CFR <- mean(cfrz,na.rm=TRUE) #mean
-    #if(is.na(CFR) | CFR<0 | CFR >1){
-    #  warning('Untreated CFR implied by data provided is pathological!\nUsing CFR = 0.5')
-    #  CFR <- 0.5                       #safety
-    #}
-    #End 2025-12-05 Test
-    ## calculate last CDR to carry fwd
-    CDR <- Nhat[maxidxnotna] / Ihat[maxidxnotna]
-    if(is.na(CDR)  | CDR<0 | CDR >1 ){
-      warning('Untreated CDR implied by data provided is pathological!\nUsing CDR = 0.7')
-      CDR <- 0.7                       #safety
-    }
+
     ## replace incidence forecasts with version using N/CDR
     RI[,I.sd:=I.sd/I.mid]        #make proportion
     RI[(maxidxnotna+1):nrow(RI),
@@ -295,38 +312,42 @@ projections <- function(year,
     ANS2 <- merge(RM,RP,by='year')
     ANS <- merge(ANS1,ANS2,by='year')
     if('Hhat' %in% names(arguments) & 'sEH' %in% names(arguments)) ANS <- merge(ANS,RH,by='year')
-    ## HR interventions NOTE the notif one will have limited validity
-    
-    
+
+    ##HR interventions NOTE the notif one will have limited validity
+
+    #Impact of prevention (HRi), case detection (HRd) and treatment success improvement (ORt) on Mortality
+    #Incidence and impact of prevention
+    I0 <- ANS$I.mid;
+    I1 <- HRi*I0;
+
+    #case detection rate, floor at 1, see mortality formula below
+    CDR0<-pmin(CDR,1)
+    CDR1<-pmin(CDR0*HRd,1)
+
+    #mortality = untreated I x CFR + treated I x Txf
+    M0  <-  I0 * ((1-CDR0) * CFR + CDR0 * TXf0)
+    M1  <-  I1 * ((1-CDR1) * CFR + CDR1 * TXf)
+
+    #relative impact on M, for now, no decrease allowed
+    rM = pmin(pmax(M1/M0,0),1)
+
+    #apply relative impact rM on base mortality
+    ANS$M.mid = pmax(ANS$M.mid*rM,0)
+    ANS$M.lo  = pmax(ANS$M.lo*rM,0) #pmax(Mlo-1*96*sEdM,0)
+    ANS$M.hi  = pmax(ANS$M.hi*rM,0) #Mhi+1*96*sEdM
+
+    #impact of prevention  on incidence
     ANS[,c('I.mid','I.lo','I.hi'):=list(I.mid*HRi,I.lo*HRi,I.hi*HRi)] #OK
+    #impact of prevention and case detection
     ANS[,c('N.mid','N.lo','N.hi'):=list(N.mid*HRi*HRd,N.lo*HRi*HRd,N.hi*HRi*HRd)] #approx
-  
-    # dont need pb at the moment, delete in next update
-    #pb <- maxidxnotna+1; pe <- nrow(ANS)   #begin/end of projection
-    print('CFR')
-    print(CFR)
-    print('TXf')
-    print(TXf)
-    print('ANS$N.mid')
-    print(ANS$N.mid)
-    M <- ANS$M.mid
-    dM <- pmax((1-HRi)* ANS$I.mid * CFR + (HRi*HRd-1) * ANS$N.mid * (CFR - TXf),0)
-    print('DM')
-    print(dM)
-    print('HRI')  
-    print(HRi)
-    print('HRD')
-    print(HRd)
-    ANS$M.mid = pmax(M-dM,0)
-    ANS$M.lo = pmax(ANS$M.lo-dM,0) #pmax(Mlo-1*96*sEdM,0)
-    ANS$M.hi = pmax(ANS$M.hi-dM,0)#Mhi+1*96*sEdM
-    
+
+
     ## NOTE no extra uncertainty in line above
     ## computing this using duration assumption -
     ANS[,P.mid:=N.mid*tx.mid + pmax(I.mid-N.mid,0)*ut.mid]
-    
+
     #ANS$P.mid = pmax(ANS$P.mid,0) #Guy added this on 2024-07-31 to avoid negative prevalence
-    
+
     ## P.sd^2 = (N.mid*tx.m)^2 * ((N.sd/N.mid)^2+(tx.sd/tx.mid)^2) +
     ##     ((I.mid-N.mid)*ut.m)^2 * ( (ut.sd/ut.m)^2 + (I.sd^2+N.sd^2)/(I.mid-N.mid)^2 )
     ANS[,P.sd:=sqrt(
@@ -334,20 +355,33 @@ projections <- function(year,
     ((I.mid-N.mid)*ut.mid)^2 * ( (ut.sd/ut.mid)^2 + (I.sd^2+N.sd^2)/(I.mid-N.mid)^2 )
     )]
     ANS[,c('P.lo','P.hi'):=list(pmax(0,P.mid-1.96*P.sd),P.mid+1.96*P.sd)]
+
+    print("end calc failsafe")
+    print("impact type:")
+    print(impactType)
+
   } else { #============== SSM versions ==============
+
+    outs_mcmc_fit_count <<-0
+    mcmc_fit_base <<- NULL
+
     nahead <- which.max(!is.na(rev(Ihat)))-1 #assume NAs at back
     lastd <- length(Ihat)-nahead
-    
+
     #2025-12-05. Ignore this, not removing untreated mortality at the moment
     #Mhat <- Mhat - TXf * Nhat
     #End 2025-12-05. Ignore this
-    
-    #Mhat <- pmax(Mhat,0)
-    
+
     ##if(any(Mhat[1:lastd]<0)) stop('Implied deaths on TB treatment exceed total TB mortality!')
-    if(any(Mhat[lastd]<0)) stop('Implied deaths on TB treatment exceed total TB mortality!')
+    #if(any(Mhat[lastd]<0)) stop('Implied deaths on TB treatment exceed total TB mortality!')
+
     logIRR <- log(HRi[(lastd+1):length(HRd)])      #IRR on incidence
     logIRRdelta <- log(HRd[(lastd+1):length(HRd)]) #detection
+
+    #approximate impact of treatment success by increase detection with that ratio
+    #rORt=1/ORt[(lastd+1):length(HRd)]
+    #logIRRdelta <- logIRRdelta + log(rORt)#treatment outcomes
+
     if(all(is.na(Phat))){
       ## make guess for P
       Phat <- Nhat * tx.mid + (pmax(Ihat-Nhat,0)) * ut.mid
@@ -367,7 +401,8 @@ projections <- function(year,
     if(verbose) cat('...nahead=',nahead,'\n')
     if(verbose) cat('...lastd=',lastd,'\n')
     if(verbose) cat('...passing off to Cprojections:\n')
-    
+
+    #no interventions
     ANS0 <- Cprojections(year=year[didx],
                         Ihat=Ihat[didx],sEI=sEI[didx],
                         Nhat=Nhat[didx],sEN=sEN[didx],
@@ -378,11 +413,13 @@ projections <- function(year,
                         logIRRdelta= 0*logIRRdelta,
                         returntype=output,
                         modeltype=modeltype,
+                        impacttype="baseline",
                         verbose=verbose,
                         ...
                         )
-    
-  ANS0_delta <- Cprojections(year=year[didx],
+
+   #only case detection intervention
+   ANS0_delta <- Cprojections(year=year[didx],
                         Ihat=Ihat[didx],sEI=sEI[didx],
                         Nhat=Nhat[didx],sEN=sEN[didx],
                         Mhat=Mhat[didx],sEM=sEM[didx],
@@ -392,10 +429,12 @@ projections <- function(year,
                         logIRRdelta= logIRRdelta,
                         returntype=output,
                         modeltype=modeltype,
+                        impacttype=impactType,
                         verbose=verbose,
                         ...
                         )
 
+    #prevention and case detection interventions
     ANS <- Cprojections(year=year[didx],
                          Ihat=Ihat[didx],sEI=sEI[didx],
                          Nhat=Nhat[didx],sEN=sEN[didx],
@@ -406,12 +445,11 @@ projections <- function(year,
                          logIRRdelta=logIRRdelta,
                          returntype=output,
                          modeltype=modeltype,
+                         impacttype=impactType,
                          verbose=verbose,
-                         ...
-    )
-    
-    if(verbose) cat('...Cprojections returned OK...\n')
+                         ...)
 
+    if(verbose) cat('...Cprojections returned OK...\n')
 
   }
   if(modeltype!='failsafe' & !returninternalfit){
@@ -441,7 +479,7 @@ projections <- function(year,
            (N.hi-N.lo)/3.92,
            (M.hi-M.lo)/3.92,
            (P.hi-P.lo)/3.92)] #NOTE were N TODO
-    
+
     ANS0 <- data.table::dcast(ANS0[variable %in% c('Incidence','Notifications',
                                                    'Prevalence','Deaths','time')],
                               time ~ variable,value.var=c('mid','lo','hi'))
@@ -460,6 +498,11 @@ projections <- function(year,
     names(ANS0)[n=='hi_Prevalence'] <- 'P.hi'
     ANS0$year <- year[ANS0$year]
     ANS0 <- ANS0[!is.na(year)] #removes 1 ahead if 'fit'
+    ANS0[,c('I.sd','N.sd','M.sd','P.sd'):=
+          list((I.hi-I.lo)/3.92,
+               (N.hi-N.lo)/3.92,
+               (M.hi-M.lo)/3.92,
+               (P.hi-P.lo)/3.92)] #NOTE were N TODO
 
 
     ANS0_delta <- data.table::dcast(ANS0_delta[variable %in% c('Incidence','Notifications',
@@ -480,23 +523,85 @@ projections <- function(year,
     names(ANS0_delta)[n=='hi_Prevalence'] <- 'P.hi'
     ANS0_delta$year <- year[ANS0_delta$year]
     ANS0_delta <- ANS0_delta[!is.na(year)] #removes 1 ahead if 'fit'
-
-    #incidence impact, using logIRRdelta and HRi, as used in failsafe 
-    dI <- ANS0$I.mid*pmin(1-HRi,1);
-    ANS$I.mid <- pmax(ANS0_delta$I.mid - dI,0)
-    ANS$I.lo <- pmax(ANS0_delta$I.lo - dI,0)
-    ANS$I.hi <- pmax(ANS0_delta$I.hi - dI,0)
-
-    #mortality impact, using the same calc as failsafe 
-    dM <- (ANS0$I.mid-ANS$I.mid)*CFR + (ANS$N.mid-ANS0$N.mid)*(CFR-TXf)
-    ANS$M.mid <- pmax(ANS$M.mid - dM,0)
-    ANS$M.lo <- pmax(ANS$M.lo - dM,0)
-    ANS$M.hi <- pmax(ANS$M.hi - dM,0)
+    ANS0_delta[,c('I.sd','N.sd','M.sd','P.sd'):=
+           list((I.hi-I.lo)/3.92,
+                (N.hi-N.lo)/3.92,
+                (M.hi-M.lo)/3.92,
+                (P.hi-P.lo)/3.92)] #NOTE were N TODO
 
 
+    if(impactType=='baseline'){
+      ANS <- ANS0}
+    else{
+
+    #Impact of prevention (HRi),
+    #case detection (HRd) and
+    #treatment success improvement (ORt) on Mortality
+
+    #Incidence and impact of prevention.
+    I0 <- ANS0$I.mid # no intervention
+    #Impact of detection on I is captured in ANS0_delta via SSM method:
+    I1 <- HRi*ANS0_delta$I.mid
+
+    #estimate impact of HRi on Incidence directly by applying
+    #to impact of logIRRdelta, which is applied through SSM
+    rI = pmax(pmin(I1/I0,1),0)
+    ANS$I.mid <- pmin(ANS0_delta$I.mid*rI,ANS0$I.mid)
+    ANS$I.lo  <- pmin(ANS0_delta$I.lo*rI, ANS0$I.lo)
+    ANS$I.hi  <- pmin(ANS0_delta$I.hi*rI, ANS0$I.hi)
+    I1 <- ANS$I.mid
+
+    #case detection rate, floor at 1
+    CDR0<-pmin(CDR,1)
+    CDR1<-pmin(CDR0*HRd,1)
+
+    #using the formula: mortality = untreated I x CFR + treated I x Txf
+    if(modeltype=='IPn2a'){
+
+      #estimate the impact of logIRR (prevention), logIRRdelta (detection) and TXf
+      #using a method similar to failsafe
+      M0  <-  I0 * ((1-CDR0) * CFR + CDR0 * TXf0)
+      M1  <-  I1 * ((1-CDR1) * CFR + CDR1 * TXf)
+
+      #relative impact on M, for now, no decrease allowed
+      rM = pmax(pmin(M1/M0,1),0)
+
+      ANS$M.mid = pmin(ANS0$M.mid*rM,ANS0$M.mid)
+      ANS$M.lo  = pmin(ANS0$M.lo*rM,ANS0$M.lo)
+      ANS$M.hi  = pmin(ANS0$M.hi*rM,ANS0$M.hi)
+      }
+    else {
+      #estimate the impact of change in TXf (relative to TXf0) alone.
+      #impact of logIRR (prevention) and logIRRdelta (detection) already applied through SSM
+
+      M0  <-  I0 *  CDR0 * TXf0
+      M1  <-  I1 *  CDR1 * TXf
+
+      #relative impact on M, for now, no decrease allowed
+      rM = pmax(pmin(M1/M0,1),0)
+
+      ANS$M.mid = pmin(ANS$M.mid*rM,ANS0$M.mid)
+      ANS$M.lo  = pmin(ANS$M.lo*rM, ANS0$M.lo)
+      ANS$M.hi  = pmin(ANS$M.hi*rM, ANS0$M.hi)
+    }
+
+    #rescale ANS N to match incidence relative change at first year of scale-up
+    #reason: delayed impact of SSM variants
+    if(firstYearImpact>lastd && outs_mcmc_fit_count > 0)
+    {
+      facN <- ANS$N.mid[firstYearImpact+1]/ANS0$N.mid[firstYearImpact+1];
+      #facN <- HRd[firstYearImpact]
+      facN <- pmax(facN,1)
+      if(facN > 1){
+        facN <- (facN+1)/2
+      }
+
+      ANS$N.mid[firstYearImpact] <- ANS$N.mid[firstYearImpact] * facN;
+
+    }#if rescale N
 
 
-    
+
     #Commenting ANS[,M.mid:=M.mid + TXf * N.mid] out (for testing 2025-12-05)
     ### adding back on deaths off treatment, not needed with current approach
     #ANS[,M.mid:=M.mid + TXf * N.mid]
@@ -506,17 +611,25 @@ projections <- function(year,
     #ANS[,M.hi:=M.mid + 1.96*M.sd]
     #ANS[,M.lo:=pmax(M.mid - 1.96*M.sd,0)]
     #End Commenting ANS[,M.mid:=M.mid + TXf * N.mid] out (for testing 2025-12-05)
+
     ## reorder
     setcolorder(ANS,neworder = c("year",
                                  "I.mid", "I.sd",  "I.lo", "I.hi",
                                  "N.mid", "N.sd",  "N.lo", "N.hi",
                                  "M.mid", "M.sd",  "M.lo", "M.hi",
                                  "P.mid", "P.sd",  "P.lo", "P.hi" ))
+  }#if scale-up
+    print("end calc SSM method")
+    print("impact type:")
+    print(impactType)
+
   }
+
   if(modeltype!='failsafe' & returninternalfit)
     warning("Note internal mortality excludes deaths on TB treatment!")
   ## output
   ANS
+
 }
 
 
@@ -619,6 +732,7 @@ Cprojections <- function(year,
                         nahead=0,
                         returntype='projection',
                         modeltype='IP',
+                        impacttype='scaleup',
                         verbose=FALSE
                         ){
 
@@ -656,13 +770,13 @@ Cprojections <- function(year,
     NoverI <- Nhat[temp_maxnona]/Ihat[temp_maxnona]
   }
   #End Add this on 2025-12-06 as per Carel suggestion
-  
+
   ## transformations NOTE reconsider
   Yhat <- log(Yhat)
   Vhat <- cbind( rep(1/10,nrow(Yhat)), #I
-                rep(1/3,nrow(Yhat)),  #P
-                rep(1/10,nrow(Yhat)),  #N
-                rep(1/10,nrow(Yhat)) ) #D
+                 rep(1/3,nrow(Yhat)),  #P
+                 rep(1/10,nrow(Yhat)),  #N
+                 rep(1/10,nrow(Yhat)) ) #D
   if('override' %in% names(arguments)){
     if('Vhat' %in% names(override)){
       if(override[['Vhat']]=='literal'){
@@ -694,7 +808,7 @@ Cprojections <- function(year,
 
   ## initial thetas
   initial_theta <- c(logSI = -1,logsdelta=-1,logsomega=-1) #default rwI
-  initial_theta <- c(initial_theta,c(logishft=0,lognshft=0,logmshft=0)) #unknown IS 
+  initial_theta <- c(initial_theta,c(logishft=0,lognshft=0,logmshft=0)) #unknown IS
   if('override' %in% names(arguments)){
     if('initial_theta' %in% names(override)){
       initial_theta <- override[['initial_theta']]
@@ -702,7 +816,7 @@ Cprojections <- function(year,
     }
   }
   initial_theta_ip <- c(logSI = -1,logsdelta=-1,logsomega=-1,logphiP=-1,logitpr=-1) #IP
-  initial_theta_ip<- c(initial_theta_ip,c(logishft=0,lognshft=0,logmshft=0)) #unknown IS 
+  initial_theta_ip<- c(initial_theta_ip,c(logishft=0,lognshft=0,logmshft=0)) #unknown IS
   if('override' %in% names(arguments)){
     if('initial_theta_ip' %in% names(override)){
       initial_theta_ip <- override[['initial_theta_ip']]
@@ -858,16 +972,41 @@ Cprojections <- function(year,
   if(verbose) cat('Starting inference...\n')
 
   ## inference
+  if(outs_mcmc_fit_count > 0){
+    print("replacing mcmc_fit with baseline mcmc_fit")
+    assign("mcmc_fit", mcmc_fit_base, envir = .GlobalEnv)
+  }
+  else{
   mcmc.type <- 'ekf'              #change inference type
-  ITER <- 6000 ; BURN <- 1000 
+  ITER <- 6000 ; BURN <- 1000
   mcmc_fit <- bssm::run_mcmc(model, iter = ITER, burnin = BURN,mcmc_type = "ekf")
+  }
 
   if(verbose) cat('Postprocessing inference...\n')
   cat('calculating fit summary...\n')
   outsf <- mcmcsmry(mcmc_fit) #summarizer to mid/lo/hi
 
+
+  if(impacttype=='baseline' && outs_mcmc_fit_count == 0){
+    print("impacttype:")
+    print(impacttype)
+
+    print("setting baseline mcmc fit")
+
+    assign("outs_mcmc_fit_count", outs_mcmc_fit_count + 1, envir = .GlobalEnv)
+    assign("mcmc_fit_base", mcmc_fit, envir = .GlobalEnv)
+
+    print(outs_mcmc_fit_count)
+  }
+
+  #if(outs_mcmc_fit_count > 0){
+  #  print("replacing mcmc_fit with baseline mcmc_fit")
+  #  assign("mcmc_fit", mcmc_fit_base, envir = .GlobalEnv)
+  #}
+
   ## predict
   if(nahead>1){
+    set.seed(184)
     if(verbose) cat('Making predictions...\n')
     if(verbose) cat('nahead: ',nahead,' > 1 ...\n')
     future_model <- model
@@ -875,12 +1014,13 @@ Cprojections <- function(year,
                          start = tsp(model$y)[2] + deltat(model$y),
                          frequency = frequency(model$y))
     future_model$known_tv_params <- future_known_tv_params
-    pred <- predict(mcmc_fit, model = future_model, type = "state", 
+    pred <- predict(mcmc_fit, model = future_model, type = "state",
                     nsim = 1000)
     mcmc_fit <- pred
 
     if(verbose) cat('Postprocessing projection results...\n')
     outs <- mcmcsmry(mcmc_fit) #summarizer to mid/lo/hi
+
   }
 
   if(returntype=='futureonly'){
@@ -944,8 +1084,11 @@ Cprojections <- function(year,
     names(inputs.h)[3] <- 'hi'
     inputs.a <- merge(inputs.m,inputs.l,by=c('time','variable'))
     inputs.a <- merge(inputs.a,inputs.h,by=c('time','variable'))
-    ## ouput
+
+    ## output
     outs <- rbind(inputs.a,outs)
     return(outs)
+
+
   }
 }

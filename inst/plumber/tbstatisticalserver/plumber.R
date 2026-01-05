@@ -1,6 +1,3 @@
-# Load the development version of the fort package
-devtools::load_all()
-
 #* Echo the parameter that was sent in (for testing)
 #* @param msg The message to echo back.
 #* @get /echo
@@ -30,7 +27,7 @@ cors <- function(req, res) {
 #* @get /version
 #* @serializer unboxedJSON
 function() {
-  list(title="Fort Server", version = "2026-01-05 build 0.1.74")
+  list(title="Fort", version = "0.1.75")
 }
 
 #* @post /projection

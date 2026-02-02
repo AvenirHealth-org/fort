@@ -224,6 +224,12 @@ projections <- function(year,
     HRi <- exp( imputeTS::na_kalman(log(HRi)) )
     warning("Interpolating over NAs in HRi provided!")
   }
+
+  if(any(is.na(TXf))){
+    TXf0 <- expit( imputeTS::na_kalman(logit(TXf)) )
+    warning('Interpolating over NAs in TXf provided!')
+  } else { TXf0 <- expit( logit(TXf) );} #apply effect
+
   if(any(is.na(ORt))){
     ORt <- exp( imputeTS::na_kalman(log(ORt)) )
     warning("Interpolating over NAs in ORt provided!")
@@ -371,15 +377,20 @@ projections <- function(year,
 
   } else {
     ## ============== SSM versions ==============
-    nahead <- which.max(!is.na(rev(Ihat))) # assume NAs at back
+    #baseline copy
+    nahead <- which.max(!is.na(rev(Ihat)))-1 # assume NAs at back
     lastd <- length(Ihat) - nahead
-
     ## take off deaths on treatment
-    Mhat <- Mhat - TXf * Nhat
+    Mhat0 <- Mhat
+    Mhat0 <- Mhat0 - TXf0 * Nhat
+
     if (any(Mhat[1:lastd] < 0)) stop("Implied deaths on TB treatment exceed total TB mortality!")
     
     logIRR <- log(HRi[(lastd+1):length(HRd)]) # IRR on incidence
     logIRRdelta <- log(HRd[(lastd+1):length(HRd)]) # detection
+
+    #no interventions
+    didx <- 1:lastd # data range
 
     if (all(is.na(Phat))) {
       ## make guess for P
@@ -396,13 +407,64 @@ projections <- function(year,
       if (verbose) cat("No Phat supplied: making a guess from Ihat!\n")
     }
 
+    set.seed(183)
+    ANS0 <- Cprojections(
+      year = year[didx],
+      Ihat = Ihat[didx], sEI = sEI[didx],
+      Nhat = Nhat[didx], sEN = sEN[didx],
+      Mhat = Mhat0[didx], sEM = sEM[didx],
+      Phat = Phat[didx], sEP = sEP[didx],
+      nahead = nahead,
+      logIRR = 0*logIRR,
+      logIRRdelta = 0*logIRRdelta,
+      returntype = output,
+      modeltype = modeltype,
+      verbose = verbose,
+      ...
+    )
+
+    ## baseline model, to test if projections repeat between runs
+    if (modeltype != "failsafe" & !returninternalfit) {
+
+    ANS0 <- data.table::dcast(ANS0[variable %in% c('Incidence','Notifications',
+                                                   'Prevalence','Deaths','time')],
+                              time ~ variable,value.var=c('mid','lo','hi'))
+   }
+
+    n <- names(ANS0)
+    names(ANS0)[n == "mid_Incidence"] <- "I.mid"
+    names(ANS0)[n == "lo_Incidence"] <- "I.lo"
+    names(ANS0)[n == "hi_Incidence"] <- "I.hi"
+    names(ANS0)[n == "mid_Notifications"] <- "N.mid"
+    names(ANS0)[n == "lo_Notifications"] <- "N.lo"
+    names(ANS0)[n == "hi_Notifications"] <- "N.hi"
+    names(ANS0)[n == "mid_Deaths"] <- "M.mid"
+    names(ANS0)[n == "lo_Deaths"] <- "M.lo"
+    names(ANS0)[n == "hi_Deaths"] <- "M.hi"
+    names(ANS0)[n == "mid_Prevalence"] <- "P.mid"
+    names(ANS0)[n == "lo_Prevalence"] <- "P.lo"
+    names(ANS0)[n == "hi_Prevalence"] <- "P.hi"
+
+    ANS0[, M.mid := M.mid + TXf0 * N.mid]
+
+
+    ##============================##
+    #scale-up copy
+    nahead <- which.max(!is.na(rev(Ihat))) # assume NAs at back
+    lastd <- length(Ihat) - nahead
+
+    Mhat <- Mhat - TXf * Nhat
+    if (any(Mhat[1:lastd] < 0)) stop("Implied deaths on TB treatment exceed total TB mortality!")
+    
+    logIRR <- log(HRi[(lastd+1):length(HRd)]) # IRR on incidence
+    logIRRdelta <- log(HRd[(lastd+1):length(HRd)]) # detection
 
     didx <- 1:lastd # data range
     if (verbose) cat("...nahead=", nahead, "\n")
     if (verbose) cat("...lastd=", lastd, "\n")
     if (verbose) cat("...passing off to Cprojections:\n")
 
-    set.seed(183)
+      set.seed(183)
     ANS <- Cprojections(
       year = year[didx],
       Ihat = Ihat[didx], sEI = sEI[didx],
@@ -464,13 +526,38 @@ projections <- function(year,
     ANS[, M.hi := M.mid + 1.96 * M.sd]
     ANS[, M.lo := pmax(M.mid - 1.96 * M.sd, 0)]
 
-    print("Incidence projections")
+
+    print("test Incidence projections")
+    print("baseline incidence")
+    print(ANS0$I.mid)
+    print("scaleup incidence")
     print(ANS$I.mid)
 
-
-    print("Mortality projections")
+    print("test Mortality projections")
+    print("baseline mortality")
+    print(ANS0$M.mid)
+    print("scaleup mortality")
     print(ANS$M.mid)
 
+    maxidxnotna <- sum(!is.na(Ihat + Nhat + Mhat)) #last index with all necessary data provided
+    
+    #use baseline I, M and N in final year of 
+    ANS$I.mid[maxidxnotna]<-ANS0$I.mid[maxidxnotna]
+    ANS$I.lo[maxidxnotna]<-ANS0$I.lo[maxidxnotna]
+    ANS$I.hi[maxidxnotna]<-ANS0$I.hi[maxidxnotna]
+
+    ANS$M.mid[maxidxnotna]<-ANS0$M.mid[maxidxnotna]
+    ANS$M.lo[maxidxnotna]<-ANS0$M.lo[maxidxnotna]
+    ANS$M.hi[maxidxnotna]<-ANS0$M.hi[maxidxnotna]
+    
+    ANS$N.mid[maxidxnotna]<-ANS0$N.mid[maxidxnotna]
+    ANS$N.lo[maxidxnotna]<-ANS0$N.lo[maxidxnotna]
+    ANS$N.hi[maxidxnotna]<-ANS0$N.hi[maxidxnotna]
+    
+    #test for negative impact on M in first year of scale-up
+    if( ANS$M.mid[maxidxnotna+1]>ANS0$M.mid[maxidxnotna+1] ){
+	ANS$M.mid[maxidxnotna+1]<-ANS0$M.mid[maxidxnotna+1]
+    }
 
     ## reorder
     setcolorder(ANS, neworder = c(
@@ -489,8 +576,6 @@ projections <- function(year,
   ## output
   ANS
 }
-
-
 
 
 
@@ -599,7 +684,7 @@ Cprojections <- function(year,
   lastHRi <- which(exp(logIRR)!=1)
   lastHRi <- max(lastHRi)[1]
   logIRR[1:length(logIRR)-1] <- logIRR[2:length(logIRR)]
-  logIRR[lastHRi ] <- logIRR0[lastHRi]  
+  logIRR[lastHRi] <- logIRR0[lastHRi]  
 
  
   #advance impact on HRd
@@ -607,7 +692,7 @@ Cprojections <- function(year,
   lastHRd <- which(exp(logIRRdelta)!=1)
   lastHRd <- max(lastHRd)[1]
   logIRRdelta[1:length(logIRRdelta)-1] <- logIRRdelta[2:length(logIRRdelta)]
-  logIRRdelta[lastHRd ] <- logIRRdelta0[lastHRd ]  
+  logIRRdelta[lastHRd ] <- logIRRdelta0[lastHRd]  
 
   ## avoiding warnings:
   override <- variable <- value <- time <- NULL

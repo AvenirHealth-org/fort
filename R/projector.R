@@ -235,6 +235,7 @@ projections <- function(year,
     TXf <- expit(logit(TXf) + log(ORt))
   } # apply effect
 
+ 
   ## duration assumptions for use below
   ## WHO methods appendix: tx ~ U[0.2,2]; ut ~ U[1,4]
   tx.mid <- (2 + 0.2) / 2
@@ -370,13 +371,15 @@ projections <- function(year,
 
   } else {
     ## ============== SSM versions ==============
-    nahead <- which.max(!is.na(rev(Ihat))) - 1 # assume NAs at back
+    nahead <- which.max(!is.na(rev(Ihat))) # assume NAs at back
     lastd <- length(Ihat) - nahead
+
     ## take off deaths on treatment
     Mhat <- Mhat - TXf * Nhat
     if (any(Mhat[1:lastd] < 0)) stop("Implied deaths on TB treatment exceed total TB mortality!")
-    logIRR <- log(HRi[(lastd + 1):length(HRd)]) # IRR on incidence
-    logIRRdelta <- log(HRd[(lastd + 1):length(HRd)]) # detection
+    
+    logIRR <- log(HRi[(lastd+1):length(HRd)]) # IRR on incidence
+    logIRRdelta <- log(HRd[(lastd+1):length(HRd)]) # detection
 
     if (all(is.na(Phat))) {
       ## make guess for P
@@ -582,12 +585,20 @@ Cprojections <- function(year,
                         verbose = FALSE
                         ){
 
-
+  #advance impact on HRi
+  logIRR0 <- logIRR
+  lastHRi <- which(exp(logIRR)!=1)
+  lastHRi <- max(lastHRi)[1]
   logIRR[1:length(logIRR)-1] <- logIRR[2:length(logIRR)]
-  logIRRdelta[1:length(logIRRdelta)-1] <- logIRRdelta[2:length(logIRRdelta)]
+  logIRR[lastHRi ] <- logIRR0[lastHRi]  
 
-  #logIRR[1]<-logIRR[2]
-  #logIRRdelta[1]<-logIRRdelta[2]
+ 
+  #advance impact on HRd
+  logIRRdelta0<- logIRRdelta
+  lastHRd <- which(exp(logIRRdelta)!=1)
+  lastHRd <- max(lastHRd)[1]
+  logIRRdelta[1:length(logIRRdelta)-1] <- logIRRdelta[2:length(logIRRdelta)]
+  logIRRdelta[lastHRd ] <- logIRRdelta0[lastHRd ]  
 
   ## avoiding warnings:
   override <- variable <- value <- time <- NULL

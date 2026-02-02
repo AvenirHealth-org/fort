@@ -402,6 +402,7 @@ projections <- function(year,
     if (verbose) cat("...lastd=", lastd, "\n")
     if (verbose) cat("...passing off to Cprojections:\n")
 
+    set.seed(183)
     ANS <- Cprojections(
       year = year[didx],
       Ihat = Ihat[didx], sEI = sEI[didx],
@@ -462,6 +463,14 @@ projections <- function(year,
     ANS[, M.sd := sqrt(M.sd^2 + TXf^2 * N.sd^2)]
     ANS[, M.hi := M.mid + 1.96 * M.sd]
     ANS[, M.lo := pmax(M.mid - 1.96 * M.sd, 0)]
+
+    print("Incidence projections")
+    print(ANS$I.mid)
+
+
+    print("Mortality projections")
+    print(ANS$M.mid)
+
 
     ## reorder
     setcolorder(ANS, neworder = c(

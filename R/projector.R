@@ -375,8 +375,15 @@ projections <- function(year,
 
     ANS[, c("P.lo", "P.hi") := list(pmax(0, P.mid - 1.96 * P.sd), P.mid + 1.96 * P.sd)]
 
+    print("scaleup incidence")
+    print(ANS$I.mid)
+
   } else {
     ## ============== SSM versions ==============
+    
+    outs_mcmc_fit_count <<-0
+    mcmc_fit_base <<- NULL
+
     #baseline copy
     nahead <- which.max(!is.na(rev(Ihat)))-1 # assume NAs at back
     lastd <- length(Ihat) - nahead
@@ -407,6 +414,7 @@ projections <- function(year,
       if (verbose) cat("No Phat supplied: making a guess from Ihat!\n")
     }
 
+
     set.seed(183)
     ANS0 <- Cprojections(
       year = year[didx],
@@ -419,9 +427,11 @@ projections <- function(year,
       logIRRdelta = 0*logIRRdelta,
       returntype = output,
       modeltype = modeltype,
+      impacttype="baseline",
       verbose = verbose,
       ...
     )
+    outs_mcmc_fit_count
 
     ## baseline model, to test if projections repeat between runs
     if (modeltype != "failsafe" & !returninternalfit) {
@@ -450,21 +460,33 @@ projections <- function(year,
 
     ##============================##
     #scale-up copy
+   
+    #shift final year of WHO data relative to baseline model
     nahead <- which.max(!is.na(rev(Ihat))) # assume NAs at back
     lastd <- length(Ihat) - nahead
+
+    #shift impact on ORt = treatment outcomes 1 year forward alo
+    #logIRR, logIRR is shifted in CProjections
+    lastORt <- which(ORt!=1)
+    lastORt <- max(lastORt)[1]
+    TXf1 <- TXf
+    TXf1[1:length(TXf1)-1] <- TXf1[2:length(TXf1)]
+    TXf1[lastORt] <- TXf[lastORt]  
+     
+    TXf <- TXf1
 
     Mhat <- Mhat - TXf * Nhat
     if (any(Mhat[1:lastd] < 0)) stop("Implied deaths on TB treatment exceed total TB mortality!")
     
     logIRR <- log(HRi[(lastd+1):length(HRd)]) # IRR on incidence
-    logIRRdelta <- log(HRd[(lastd+1):length(HRd)]) # detection
+    logIRR <- log(HRd[(lastd+1):length(HRd)]) # detection
 
     didx <- 1:lastd # data range
     if (verbose) cat("...nahead=", nahead, "\n")
     if (verbose) cat("...lastd=", lastd, "\n")
     if (verbose) cat("...passing off to Cprojections:\n")
 
-      set.seed(183)
+    set.seed(183)
     ANS <- Cprojections(
       year = year[didx],
       Ihat = Ihat[didx], sEI = sEI[didx],
@@ -476,9 +498,11 @@ projections <- function(year,
       logIRRdelta = logIRRdelta,
       returntype = output,
       modeltype = modeltype,
+      impacttype="scaleup",
       verbose = verbose,
       ...
     )
+
 
     if (verbose) cat("...Cprojections returned OK...\n")
   }
@@ -526,20 +550,7 @@ projections <- function(year,
     ANS[, M.hi := M.mid + 1.96 * M.sd]
     ANS[, M.lo := pmax(M.mid - 1.96 * M.sd, 0)]
 
-
-    print("test Incidence projections")
-    print("baseline incidence")
-    print(ANS0$I.mid)
-    print("scaleup incidence")
-    print(ANS$I.mid)
-
-    print("test Mortality projections")
-    print("baseline mortality")
-    print(ANS0$M.mid)
-    print("scaleup mortality")
-    print(ANS$M.mid)
-
-    maxidxnotna <- sum(!is.na(Ihat + Nhat + Mhat)) #last index with all necessary data provided
+    maxidxnotna <- sum(!is.na(Ihat + Nhat + Mhat)) #last index with all necessary data provided 
     
     #use baseline I, M and N in final year of 
     ANS$I.mid[maxidxnotna]<-ANS0$I.mid[maxidxnotna]
@@ -556,7 +567,7 @@ projections <- function(year,
     
     #test for negative impact on M in first year of scale-up
     if( ANS$M.mid[maxidxnotna+1]>ANS0$M.mid[maxidxnotna+1] ){
-	ANS$M.mid[maxidxnotna+1]<-ANS0$M.mid[maxidxnotna+1]
+       #ANS$M.mid[maxidxnotna+1]<-ANS0$M.mid[maxidxnotna+1]
     }
 
     ## reorder
@@ -676,9 +687,12 @@ Cprojections <- function(year,
                         nahead = 0,
                         returntype = "projection",
                         modeltype = "IP",
+                        impacttype='scaleup',
                         verbose = FALSE
                         ){
 
+  if(impacttype=='scaleup'){
+  print("advancing impact by advancing HRs")
   #advance impact on HRi
   logIRR0 <- logIRR
   lastHRi <- which(exp(logIRR)!=1)
@@ -692,7 +706,9 @@ Cprojections <- function(year,
   lastHRd <- which(exp(logIRRdelta)!=1)
   lastHRd <- max(lastHRd)[1]
   logIRRdelta[1:length(logIRRdelta)-1] <- logIRRdelta[2:length(logIRRdelta)]
-  logIRRdelta[lastHRd ] <- logIRRdelta0[lastHRd]  
+  logIRRdelta[lastHRd ] <- logIRRdelta0[lastHRd] 
+  }
+ 
 
   ## avoiding warnings:
   override <- variable <- value <- time <- NULL
@@ -945,14 +961,36 @@ Cprojections <- function(year,
   if (verbose) cat("Starting inference...\n")
 
   ## inference
-  mcmc.type <- "ekf" # change inference type
-  ITER <- 6000
-  BURN <- 1000
-  mcmc_fit <- bssm::run_mcmc(model, iter = ITER, burnin = BURN, mcmc_type = "ekf")
+  if(outs_mcmc_fit_count > 0){
+    print("replacing mcmc_fit with baseline mcmc_fit")
+    assign("mcmc_fit", mcmc_fit_base, envir = .GlobalEnv)}
+  else{
+    mcmc.type <- "ekf" # change inference type
+    ITER <- 6000
+    BURN <- 1000
+    mcmc_fit <- bssm::run_mcmc(model, iter = ITER, burnin = BURN, mcmc_type = "ekf")
+  }
 
   if (verbose) cat("Postprocessing inference...\n")
   cat("calculating fit summary...\n")
   outsf <- mcmcsmry(mcmc_fit) #summarizer to mid/lo/hi
+
+  if(impacttype=='baseline' && outs_mcmc_fit_count == 0){
+    print("impacttype:")
+    print(impacttype)
+
+    print("setting baseline mcmc fit")
+
+    assign("outs_mcmc_fit_count", outs_mcmc_fit_count + 1, envir = .GlobalEnv)
+    assign("mcmc_fit_base", mcmc_fit, envir = .GlobalEnv)
+
+    print(outs_mcmc_fit_count)
+  }
+
+  #if(outs_mcmc_fit_count > 0){
+  #  print("replacing mcmc_fit with baseline mcmc_fit")
+  #  assign("mcmc_fit", mcmc_fit_base, envir = .GlobalEnv)
+  #}
 
   ## predict
   if (nahead > 1) {

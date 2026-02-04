@@ -479,7 +479,7 @@ projections <- function(year,
     if (any(Mhat[1:lastd] < 0)) stop("Implied deaths on TB treatment exceed total TB mortality!")
     
     logIRR <- log(HRi[(lastd+1):length(HRd)]) # IRR on incidence
-    logIRR <- log(HRd[(lastd+1):length(HRd)]) # detection
+    logIRRdelta <- log(HRd[(lastd+1):length(HRd)]) # detection
 
     didx <- 1:lastd # data range
     if (verbose) cat("...nahead=", nahead, "\n")
@@ -564,6 +564,8 @@ projections <- function(year,
     ANS$N.mid[maxidxnotna]<-ANS0$N.mid[maxidxnotna]
     ANS$N.lo[maxidxnotna]<-ANS0$N.lo[maxidxnotna]
     ANS$N.hi[maxidxnotna]<-ANS0$N.hi[maxidxnotna]
+
+    print(ANS$I.mid)
     
     #test for negative impact on M in first year of scale-up
     if( ANS$M.mid[maxidxnotna+1]>ANS0$M.mid[maxidxnotna+1] ){

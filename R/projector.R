@@ -387,10 +387,10 @@ projections <- function(year,
     #baseline copy
     nahead <- which.max(!is.na(rev(Ihat)))-1 # assume NAs at back
     lastd <- length(Ihat) - nahead
+
     ## take off deaths on treatment
     Mhat0 <- Mhat
     Mhat0 <- Mhat0 - TXf0 * Nhat
-
     if (any(Mhat[1:lastd] < 0)) stop("Implied deaths on TB treatment exceed total TB mortality!")
     
     logIRR <- log(HRi[(lastd+1):length(HRd)]) # IRR on incidence
@@ -460,20 +460,22 @@ projections <- function(year,
 
     ##============================##
     #scale-up copy
-   
+
     #shift final year of WHO data relative to baseline model
     nahead <- which.max(!is.na(rev(Ihat))) # assume NAs at back
     lastd <- length(Ihat) - nahead
-
+  
+    #shift final year of WHO data relative to baseline model
+    
     #shift impact on ORt = treatment outcomes 1 year forward alo
     #logIRR, logIRR is shifted in CProjections
-    lastORt <- which(ORt!=1)
-    lastORt <- max(lastORt)[1]
-    TXf1 <- TXf
-    TXf1[1:length(TXf1)-1] <- TXf1[2:length(TXf1)]
-    TXf1[lastORt] <- TXf[lastORt]  
+    #lastORt <- which(ORt!=1)
+    #lastORt <- max(lastORt)[1]
+    #TXf1 <- TXf
+    #TXf1[1:length(TXf1)-1] <- TXf1[2:length(TXf1)]
+    #TXf1[lastORt] <- TXf[lastORt]  
      
-    TXf <- TXf1
+    #TXf <- TXf1
 
     Mhat <- Mhat - TXf * Nhat
     if (any(Mhat[1:lastd] < 0)) stop("Implied deaths on TB treatment exceed total TB mortality!")
@@ -569,7 +571,7 @@ projections <- function(year,
     
     #test for negative impact on M in first year of scale-up
     if( ANS$M.mid[maxidxnotna+1]>ANS0$M.mid[maxidxnotna+1] ){
-       #ANS$M.mid[maxidxnotna+1]<-ANS0$M.mid[maxidxnotna+1]
+       ANS$M.mid[maxidxnotna+1]<-ANS0$M.mid[maxidxnotna+1]
     }
 
     ## reorder
@@ -701,7 +703,7 @@ Cprojections <- function(year,
   lastHRi <- max(lastHRi)[1]
   logIRR[1:length(logIRR)-1] <- logIRR[2:length(logIRR)]
   logIRR[lastHRi] <- logIRR0[lastHRi]  
-
+  print(exp(logIRR))
  
   #advance impact on HRd
   logIRRdelta0<- logIRRdelta
